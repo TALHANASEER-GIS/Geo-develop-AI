@@ -1,0 +1,19 @@
+{
+  "project": "geo-develop-ai",
+  "executed": "2026-11-01",
+  "bbox_wgs84": [74.30, 31.47, 74.32, 31.49],
+  "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+  "before_start_inclusive": "2023-03-01",
+  "before_end_exclusive": "2023-05-01",
+  "after_start_inclusive": "2024-03-01",
+  "after_end_exclusive": "2024-05-01",
+  "before_scene_count": 8,
+  "after_scene_count": 7,
+  "common_valid_coverage_percent": 99.91507907848334,
+  "mean_ndvi_before": 0.25385611000874536,
+  "mean_ndvi_after": 0.2747525822617162,
+  "mean_ndvi_difference": 0.020896472252969284,
+  "method": "Per-scene NDVI, temporal median, scene-wide cloud <30%, SCL classes 4/5/6 retained, at least two valid observations per period, common mask, regional means at 10 m EPSG:32643",
+  "status": "Pilot executed in Earth Engine Code Editor; not connected to dashboard; script backup saved locally; editor script not saved to a cloud repository",
+  "limitations": "NDVI change is not a validated land-cover conversion measurement. Crops, weather, phenology and residual cloud may affect it. SCL mask is a baseline. Coverage is a raster area estimate."
+}
