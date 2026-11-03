@@ -8,3 +8,6 @@ node_modules/
 geodevelop_job.json
 geodevelop_result.json
 GeoDevelop-SAM3-results.zip
+
+runtime-data/
+.pytest_cache/

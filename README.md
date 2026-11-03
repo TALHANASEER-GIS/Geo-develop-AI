@@ -1,5 +1,17 @@
 # GeoDevelop AI
 
+A geospatial dashboard with an authenticated Python processing backend.
+
+**Public dashboard:** https://talhanaseer-gis.github.io/Geo-develop-AI/docs/#lab
+
+## Processing Lab (v0.2)
+
+The new lab connects to a local, Colab or cloud runtime for a tool-using natural-language agent, automatic alignment, tiled GeoTIFF processing, Landsat surface temperature, Sentinel-1 flood screening, SAM 3 building/road candidates, exposure and evidence-based human review.
+
+Read [PROCESSING.md](PROCESSING.md) for setup, input requirements, cloud deployment limits and validation. The interface can be live while the backend is disconnected. A GPU, approved weights, a configured language model and Earth Engine authorization are separate runtime dependencies. These workflows are prototypes, not independently validated damage or building inventories.
+
+## Earlier MVP
+
 A geospatial dashboard for satellite scene discovery, two-date drone image comparison, and a Google Colab workflow for Meta SAM 3 building segmentation.
 
 ## Open the dashboard

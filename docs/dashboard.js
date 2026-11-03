@@ -1,6 +1,6 @@
 'use strict';
 const byId=id=>document.getElementById(id);
-const names={satellite:'Satellite workbench',drone:'Drone imagery lab',colab:'SAM 3 · Colab GPU',results:'Results & reports',data:'Data catalog'};
+const names={lab:'Processing Lab � Connected runtime',satellite:'Satellite workbench',drone:'Drone imagery lab',colab:'SAM 3 · Colab GPU',results:'Results & reports',data:'Data catalog'};
 function go(page){if(!names[page])return;document.querySelectorAll('.page').forEach(e=>e.classList.toggle('shown',e.id===page));document.querySelectorAll('nav button').forEach(e=>e.classList.toggle('selected',e.dataset.page===page));byId('workspaceTitle').textContent=names[page];history.replaceState(null,'','#'+page);if(page==='satellite')requestAnimationFrame(()=>byId('satelliteFrame').contentWindow.postMessage({type:'geodevelop-resize'},'*'));}
 document.querySelectorAll('[data-page]').forEach(e=>e.onclick=()=>go(e.dataset.page));document.querySelectorAll('[data-go]').forEach(e=>e.onclick=()=>go(e.dataset.go));go(location.hash.slice(1)||'satellite');
 document.querySelector('.brand').onclick=event=>{event.preventDefault();go('satellite');};
