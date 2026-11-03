@@ -76,6 +76,9 @@ def run(kind,before,after,out,options,progress):
         # Initialize tiled outputs with nodata even when processing only a geographic crop.
         profile=raster_profile(pair,dtype='float32' if kind=='temperature' else 'uint8',nodata=-9999 if kind=='temperature' else 255)
         dst=stack.enter_context(rasterio.open(out/'change.tif','w',**profile))
+        if kind=='temperature':
+            tbdst=stack.enter_context(rasterio.open(out/'before_celsius.tif','w',**profile))
+            tadst=stack.enter_context(rasterio.open(out/'after_celsius.tif','w',**profile))
         if kind in {'buildings','roads'}:
             bdst=stack.enter_context(rasterio.open(out/'before_mask.tif','w',**raster_profile(pair)))
             adst=stack.enter_context(rasterio.open(out/'after_mask.tif','w',**raster_profile(pair)))
@@ -127,6 +130,8 @@ def run(kind,before,after,out,options,progress):
                     qb,qbv=aligned_qa(options['qa_before'],pair,halo);qa,qav=aligned_qa(options['qa_after'],pair,halo)
                     b,bclear=temperature(b,qb);a,aclear=temperature(a,qa);valid &=bclear&aclear&qbv&qav
                     change=np.where(valid,a-b,-9999).astype('float32')
+                    tbdst.write(np.where(valid,b,-9999).astype('float32')[core],1,window=win)
+                    tadst.write(np.where(valid,a,-9999).astype('float32')[core],1,window=win)
                     totals['beforeSum']+=float(b[core][valid[core]].sum());totals['afterSum']+=float(a[core][valid[core]].sum())
                     totals['deltaSum']+=float(change[core][valid[core]].sum())
                 elif kind=='flood':

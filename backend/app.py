@@ -71,7 +71,7 @@ class SatelliteSpec(BaseModel):
     start_before:str;end_before:str;start_after:str;end_after:str
 
 @app.get('/health')
-def health():return dict(status='online',version='0.2.0',gpuAdapterInstalled=importlib.util.find_spec('sam3') is not None,earthEngineConfigured=bool(os.getenv('EE_PROJECT')),languageModelConfigured=bool(os.getenv('GEODEVELOP_LLM_URL')),authentication='Bearer key required')
+def health():return dict(status='online',version='0.2.0',gpuAdapterInstalled=importlib.util.find_spec('sam3') is not None,earthEngineConfigured=bool(os.getenv('EE_PROJECT')),languageModelConfigured=bool(os.getenv('GEODEVELOP_LLM_URL') or os.getenv('GEODEVELOP_LLM_PROVIDER')),authentication='Bearer key required')
 @app.get('/api/assets',dependencies=[Depends(auth)])
 def list_assets():return assets()
 @app.get('/api/jobs',dependencies=[Depends(auth)])
