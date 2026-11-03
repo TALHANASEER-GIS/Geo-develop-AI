@@ -22,7 +22,11 @@ def metadata(path):
                     nodata=src.nodata,driver=src.driver)
 
 class Pair:
-    def __init__(self,before,after,bbox=None):
+    def __init__(self,before,after,bbox=None,geometry=None):
+        self.geometry=None
+        if geometry:
+            from .boundary import validate_geometry
+            geometry,bbox=validate_geometry(geometry)
         self.stack=ExitStack()
         self.after=self.stack.enter_context(rasterio.open(after,sharing=False))
         original=self.stack.enter_context(rasterio.open(before,sharing=False))
@@ -43,6 +47,10 @@ class Pair:
             from rasterio.warp import transform_bounds
             b=transform_bounds('EPSG:4326',self.after.crs,*bbox)
             self.window=from_bounds(*b,transform=self.after.transform).round_offsets().round_lengths().intersection(self.window)
+        if geometry:
+            from rasterio.warp import transform_geom
+            if not self.after.crs:raise ValueError('A map polygon needs georeferenced images.')
+            self.geometry=transform_geom('EPSG:4326',self.after.crs,geometry)
         self.scales={}
     def close(self):self.stack.close()
     def __enter__(self):return self
@@ -62,6 +70,11 @@ class Pair:
         valid=~np.ma.getmaskarray(a).any(axis=0)
         # Valid dataset/alpha masks, plus opaque black gaps commonly used by orthomosaics.
         valid &= src.dataset_mask(window=win,out_shape=a.shape[1:])>0
+        if self.geometry:
+            from rasterio.features import geometry_mask
+            from affine import Affine
+            transform=src.window_transform(win)*Affine.scale(win.width/a.shape[2],win.height/a.shape[1])
+            valid &=geometry_mask([self.geometry],out_shape=a.shape[1:],transform=transform,invert=True)
         data=np.asarray(a.filled(0))
         if rgb:
             if data.shape[0]<3:data=np.repeat(data[:1],3,axis=0)

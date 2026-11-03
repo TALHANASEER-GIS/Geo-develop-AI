@@ -84,3 +84,7 @@ Tests exercise known-shift registration, failed alignment, Landsat scaling/QA ma
 - Earth Engine Landsat 8: https://developers.google.com/earth-engine/datasets/catalog/LANDSAT_LC08_C02_T1_L2
 - Earth Engine Sentinel-1: https://developers.google.com/earth-engine/datasets/catalog/COPERNICUS_S1_GRD
 - Official SAM 3: https://github.com/facebookresearch/sam3
+
+
+## Map workspace (v0.3)
+The Processing Lab has OpenStreetMap/Esri navigation layers, explicit place search, click-to-draw polygons, one-feature WGS84 GeoJSON import (Polygon/MultiPolygon), and a small Lahore example. The basemap is not a dated analysis observation. Boundaries are limited to 2,000 vertices and a 0.25-degree envelope per side for the map pilot. Satellite jobs carry both geometry and envelope; Earth Engine clips observations to the actual polygon and fills outside pixels with explicit nodata before local statistics. Georeferenced uploaded imagery uses a per-window polygon mask. Ordinary PNG/JPEG pairs cannot be cropped using geographic polygons. Result overlays are reprojected to WGS84 with transparent nodata; metrics and original evidence downloads remain available. Upgrade/restart the backend before using the new UI: `/health` must report `polygonSupported: true`. Place search sends the entered query to OpenStreetMap Nominatim; basemap tiles load from their attributed providers.

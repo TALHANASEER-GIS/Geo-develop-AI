@@ -2,6 +2,7 @@
 import os,datetime
 from pathlib import Path
 import httpx
+from .boundary import validate_geometry
 
 def bounds(bbox):
     if len(bbox)!=4 or not(-180<=bbox[0]<bbox[2]<=180 and -85<=bbox[1]<bbox[3]<=85):raise ValueError('Invalid WGS84 bounding box.')
@@ -15,12 +16,16 @@ def scene_search(collection,bbox,start,end):
         r=client.post('https://planetarycomputer.microsoft.com/api/stac/v1/search',json=dict(collections=[collection],bbox=bbox,datetime=start+'/'+end,limit=20));r.raise_for_status()
     return [dict(id=f['id'],date=f['properties'].get('datetime'),cloud=f['properties'].get('eo:cloud_cover'),bbox=f.get('bbox')) for f in r.json().get('features',[])]
 
-def gee_pair(kind,bbox,start_before,end_before,start_after,end_after,out):
+def gee_pair(kind,bbox,start_before,end_before,start_after,end_after,out,geometry=None):
     import ee
     bounds(bbox)
     if not os.getenv('EE_PROJECT'):raise ValueError('Configure EE_PROJECT and authorize Earth Engine on the backend. No satellite processing has run.')
     ee.Initialize(project=os.environ['EE_PROJECT'])
-    aoi=ee.Geometry.Rectangle(bbox)
+    if geometry:
+        geometry, polygon_bounds=validate_geometry(geometry)
+        bounds(polygon_bounds)
+        if any(abs(a-b)>1e-6 for a,b in zip(bbox,polygon_bounds)):raise ValueError('Polygon and bounding box disagree.')
+    aoi=ee.Geometry(geometry, proj='EPSG:4326', geodesic=False) if geometry else ee.Geometry.Rectangle(bbox)
     def period(s,e):
         if datetime.date.fromisoformat(e)<datetime.date.fromisoformat(s):raise ValueError('End date precedes start date.')
         if (datetime.date.fromisoformat(e)-datetime.date.fromisoformat(s)).days>120:raise ValueError('Use windows of at most 120 days.')
@@ -49,8 +54,9 @@ def gee_pair(kind,bbox,start_before,end_before,start_after,end_after,out):
         pair=b.updateMask(allowed).rename('before').addBands(a.updateMask(allowed).rename('after'))
         provenance=dict(relativeOrbit=orbit,sceneCounts=[cb.size().getInfo(),ca.size().getInfo()],source='Sentinel-1 GRD VV dB',composite='Same-relative-orbit median; 30 m focal median; slope <5 deg and JRC permanent water exclusion',scale=20)
     else:raise ValueError('Satellite acquisition supports temperature and flood.')
+    provenance['studyGeometry']=geometry or dict(type='Polygon',coordinates=[[[bbox[0],bbox[1]],[bbox[2],bbox[1]],[bbox[2],bbox[3]],[bbox[0],bbox[3]],[bbox[0],bbox[1]]]])
     # Both bands retain a common mask; bounded pilot export stays below EE interactive export limits.
-    pair=pair.updateMask(pair.mask().reduce(ee.Reducer.min())).clip(aoi)
+    pair=pair.updateMask(pair.mask().reduce(ee.Reducer.min())).clip(aoi).unmask(-9999, sameFootprint=False)
     url=pair.getDownloadURL(dict(region=aoi,scale=provenance['scale'],crs='EPSG:4326',format='GEO_TIFF'))
     p=Path(out)/'satellite_pair.tif'
     with httpx.stream('GET',url,timeout=180,follow_redirects=True) as response:

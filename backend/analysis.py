@@ -72,7 +72,7 @@ def run(kind,before,after,out,options,progress):
         if not options.get('sar_confirmed'):raise ValueError('Confirm calibrated terrain-corrected Sentinel-1 VV dB input, not an RGB image.')
         if not options.get('relative_orbit_before') or options.get('relative_orbit_before')!=options.get('relative_orbit_after'):
             raise ValueError('SAR before/after relative orbit numbers must be supplied and equal.')
-    with Pair(before,after,options.get('bbox')) as pair, ExitStack() as stack:
+    with Pair(before,after,options.get('bbox'),options.get('geometry')) as pair, ExitStack() as stack:
         # Initialize tiled outputs with nodata even when processing only a geographic crop.
         profile=raster_profile(pair,dtype='float32' if kind=='temperature' else 'uint8',nodata=-9999 if kind=='temperature' else 255)
         dst=stack.enter_context(rasterio.open(out/'change.tif','w',**profile))
@@ -168,6 +168,29 @@ def run(kind,before,after,out,options,progress):
             result['limitations']+=['Instance counts use overlap suppression across tiles; they remain unverified and may split or merge roofs.','Instance GeoJSON coordinates are raster pixel coordinates, not longitude/latitude.']
         (out/'grid.json').write_text(json.dumps(dict(width=pair.width,height=pair.height,crs=str(pair.after.crs),transform=list(pair.after.transform)[:6])))
         return result
+
+def map_preview(path,output):
+    """Small WGS84 overlay; transparent pixels preserve actual nodata coverage."""
+    from rasterio.vrt import WarpedVRT
+    with rasterio.open(path) as src:
+        if not src.crs:return None
+        with WarpedVRT(src,crs='EPSG:4326',resampling=Resampling.nearest) as ds:
+            scale=min(1,1200/max(ds.width,ds.height))
+            a=ds.read(1,out_shape=(max(1,round(ds.height*scale)),max(1,round(ds.width*scale))),masked=True)
+            valid=~np.ma.getmaskarray(a)&np.isfinite(a.data)
+            values=a.filled(0)
+            rgba=np.zeros((*values.shape,4),np.uint8)
+            rgba[:,:,:3]=[219,227,213]
+            if ds.dtypes[0]=='float32':
+                v=np.clip(values/10,-1,1)
+                rgba[:,:,0]=220+35*np.maximum(v,0)-120*np.maximum(-v,0)
+                rgba[:,:,1]=220-150*np.abs(v)
+                rgba[:,:,2]=220+35*np.maximum(-v,0)-120*np.maximum(v,0)
+            else:
+                rgba[values==1,:3]=[0,158,128];rgba[values==2,:3]=[224,70,85]
+            rgba[:,:,3]=np.where(valid,255,0)
+            Image.fromarray(rgba).save(output)
+            return dict(bounds=list(ds.bounds),crs='EPSG:4326',overlay='map_preview.png')
 
 def preview(path,output):
     with rasterio.open(path) as ds:

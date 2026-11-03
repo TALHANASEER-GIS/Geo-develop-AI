@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel,Field,ConfigDict
 from .raster import metadata,Pair,raster_profile,pixel_area_km2
 from . import analysis,satellite,agent
+from .boundary import validate_geometry
 
 ROOT=Path(os.getenv('GEODEVELOP_DATA','runtime-data')).resolve();ROOT.mkdir(parents=True,exist_ok=True)
 TOKEN=os.getenv('GEODEVELOP_API_KEY') or secrets.token_urlsafe(32)
@@ -47,7 +48,7 @@ async def lifespan(app):
         print('GeoDevelop runtime access key (keep private): '+TOKEN)
     yield
 
-app=FastAPI(title='GeoDevelop AI Processing',version='0.2.0',lifespan=lifespan)
+app=FastAPI(title='GeoDevelop AI Processing',version='0.3.0',lifespan=lifespan)
 origins=os.getenv('GEODEVELOP_ORIGINS','https://talhanaseer-gis.github.io,http://127.0.0.1:8765,http://localhost:8765,http://127.0.0.1:8766').split(',')
 app.add_middleware(CORSMiddleware,allow_origins=origins,allow_credentials=False,allow_methods=['GET','POST'],allow_headers=['Authorization','Content-Type','X-Filename'])
 
@@ -68,10 +69,11 @@ class ReviewSpec(BaseModel):
 class SatelliteSpec(BaseModel):
     kind:str=Field(pattern='^(flood|temperature)$')
     bbox:list[float]=Field(min_length=4,max_length=4)
+    geometry:dict|None=None
     start_before:str;end_before:str;start_after:str;end_after:str
 
 @app.get('/health')
-def health():return dict(status='online',version='0.2.0',gpuAdapterInstalled=importlib.util.find_spec('sam3') is not None,earthEngineConfigured=bool(os.getenv('EE_PROJECT')),languageModelConfigured=bool(os.getenv('GEODEVELOP_LLM_URL') or os.getenv('GEODEVELOP_LLM_PROVIDER')),authentication='Bearer key required')
+def health():return dict(status='online',version='0.3.0',polygonSupported=True,gpuAdapterInstalled=importlib.util.find_spec('sam3') is not None,earthEngineConfigured=bool(os.getenv('EE_PROJECT')),languageModelConfigured=bool(os.getenv('GEODEVELOP_LLM_URL') or os.getenv('GEODEVELOP_LLM_PROVIDER')),authentication='Bearer key required')
 @app.get('/api/assets',dependencies=[Depends(auth)])
 def list_assets():return assets()
 @app.get('/api/jobs',dependencies=[Depends(auth)])
@@ -98,6 +100,8 @@ def path_for(id):
     return next((ROOT/'assets'/id).glob('input.*'))
 
 def submit(spec,extra=None):
+    if spec.options.get('geometry'):
+        spec.options['geometry'], spec.options['bbox']=validate_geometry(spec.options['geometry'])
     if spec.kind=='exposure':
         for key in ['building_job','flood_job']:jobdir(spec.options.get(key,''))
     elif not extra:path_for(spec.before);path_for(spec.after)
@@ -108,7 +112,12 @@ def submit(spec,extra=None):
 def create_job(spec:JobSpec):return submit(spec)
 @app.post('/api/satellite-jobs',dependencies=[Depends(auth)])
 def create_satellite_job(spec:SatelliteSpec):
-    satellite.bounds(spec.bbox)
+    try:
+        satellite.bounds(spec.bbox)
+        if spec.geometry:
+            spec.geometry, polygon_bounds=validate_geometry(spec.geometry)
+            if any(abs(a-b)>1e-6 for a,b in zip(spec.bbox,polygon_bounds)):raise ValueError('Polygon and bounding box disagree.')
+    except ValueError as exc:raise HTTPException(400,str(exc)) from None
     return submit(JobSpec(kind=spec.kind,options={}),spec.model_dump())
 @app.get('/api/jobs/{id}',dependencies=[Depends(auth)])
 def get_job(id:str):return load(jobdir(id)/'job.json')
@@ -157,7 +166,7 @@ def satellite_analysis(extra,out,progress):
         for index,name in [(1,'sat_before.tif'),(2,'sat_after.tif')]:
             with rasterio.open(out/name,'w',**profile) as dst:
                 for _,win in src.block_windows(index):
-                    a=src.read(index,window=win,masked=True);dst.write(a.filled(-9999),1,window=win)
+                    a=src.read(index,window=win,masked=True);dst.write(np.where(np.ma.getmaskarray(a)|(a.data==-9999),-9999,a.data),1,window=win)
     if extra['kind']=='flood':
         result=analysis.run('flood',out/'sat_before.tif',out/'sat_after.tif',out,dict(sar_confirmed=True,relative_orbit_before=provenance['relativeOrbit'],relative_orbit_after=provenance['relativeOrbit']),progress)
     else:
@@ -186,6 +195,8 @@ def worker(id,spec,extra):
         result.update(jobId=id,generated=now(),reviewStatus='unverified')
         if not extra and spec.kind!='exposure':result['inputAssets']={'before':asset(spec.before),'after':asset(spec.after)}
         if extra:result['satelliteRequest']=extra
+        if (p/'change.tif').exists() and spec.kind!='align':
+            result['mapContext']=analysis.map_preview(p/'change.tif',p/'map_preview.png')
         write(p/'result.json',result)
         if (p/'change.tif').exists() and spec.kind!='align':analysis.preview(p/'change.tif',p/'preview.png')
         record.update(status='completed',message='Completed; predictions require review',result=result,files=[f.name for f in p.iterdir() if f.suffix in {'.tif','.png','.geojson','.json'}]);write(p/'job.json',record)
